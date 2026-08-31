@@ -2,3 +2,4 @@ Flask
 gTTS
 openai
 requests
+gunicorn
