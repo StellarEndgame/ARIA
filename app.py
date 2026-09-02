@@ -9,6 +9,8 @@ from flask import Flask, render_template, request, send_file, jsonify
 from gtts import gTTS
 from google import genai
 from google.genai import types
+from pydantic import BaseModel
+from typing import Literal
 
 
 app = Flask(__name__)
@@ -25,8 +27,10 @@ if not GEMINI_API_KEY:
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
-# You can override this in Render with ARIA_MODEL.
-MODEL = os.environ.get("ARIA_MODEL", "gemini-3.7-flash")
+MODEL = os.environ.get(
+    "ARIA_MODEL",
+    "gemini-3.7-flash"
+)
 
 
 # ============================================================
@@ -48,6 +52,7 @@ TTS_LANGUAGES = {
     "ur-IN": "ur"
 }
 
+
 LANGUAGE_NAMES = {
     "en-IN": "English",
     "hi-IN": "Hindi",
@@ -65,39 +70,88 @@ LANGUAGE_NAMES = {
 
 
 # ============================================================
+# GEMINI RESPONSE MODELS
+# ============================================================
+
+class AriaAction(BaseModel):
+    type: Literal[
+        "none",
+        "weather",
+        "medicine",
+        "call"
+    ]
+
+    contact: str
+
+
+class AriaResponse(BaseModel):
+    reply: str
+    language: Literal[
+        "en-IN",
+        "hi-IN",
+        "mr-IN",
+        "ta-IN",
+        "te-IN",
+        "bn-IN",
+        "kn-IN",
+        "ml-IN",
+        "gu-IN",
+        "pa-IN",
+        "or-IN",
+        "ur-IN"
+    ]
+
+    action: AriaAction
+
+
+# ============================================================
 # TTS CACHE
 # ============================================================
 
 TTS_CACHE = {}
+
 TTS_LOCK = threading.Lock()
+
 MAX_CACHE_ITEMS = 100
 
 
 def cache_key(text, language):
+
     return hashlib.sha256(
         f"{language}|{text}".encode("utf-8")
     ).hexdigest()
 
 
 def cleanup_cache():
+
     while len(TTS_CACHE) > MAX_CACHE_ITEMS:
+
         oldest = min(
             TTS_CACHE,
             key=lambda k: TTS_CACHE[k]["created"]
         )
+
         del TTS_CACHE[oldest]
 
 
 def generate_tts(text, language):
-    key = cache_key(text, language)
+
+    key = cache_key(
+        text,
+        language
+    )
 
     if key in TTS_CACHE:
+
         return TTS_CACHE[key]["audio"]
+
 
     with TTS_LOCK:
 
         if key in TTS_CACHE:
+
             return TTS_CACHE[key]["audio"]
+
 
         tts = gTTS(
             text=text,
@@ -105,17 +159,22 @@ def generate_tts(text, language):
             slow=False
         )
 
+
         buf = io.BytesIO()
+
         tts.write_to_fp(buf)
 
         audio = buf.getvalue()
+
 
         TTS_CACHE[key] = {
             "audio": audio,
             "created": time.time()
         }
 
+
         cleanup_cache()
+
 
         return audio
 
@@ -126,7 +185,10 @@ def generate_tts(text, language):
 
 @app.route("/")
 def home():
-    return render_template("index.html")
+
+    return render_template(
+        "index.html"
+    )
 
 
 # ============================================================
@@ -138,29 +200,49 @@ def tts():
 
     try:
 
-        data = request.get_json(silent=True) or {}
+        data = request.get_json(
+            silent=True
+        ) or {}
+
 
         text = str(
-            data.get("text", "")
+            data.get(
+                "text",
+                ""
+            )
         ).strip()
+
 
         language = str(
-            data.get("language", "en-IN")
+            data.get(
+                "language",
+                "en-IN"
+            )
         ).strip()
 
+
         if not text:
+
             return jsonify(
                 error="No text provided"
             ), 400
 
+
         if language not in TTS_LANGUAGES:
+
             language = "en-IN"
 
+
         audio = io.BytesIO(
-            generate_tts(text, language)
+            generate_tts(
+                text,
+                language
+            )
         )
 
+
         audio.seek(0)
+
 
         response = send_file(
             audio,
@@ -168,15 +250,22 @@ def tts():
             download_name="aria_voice.mp3"
         )
 
+
         response.headers[
             "Cache-Control"
         ] = "public,max-age=3600"
 
+
         return response
+
 
     except Exception as e:
 
-        print("TTS ERROR:", repr(e))
+        print(
+            "TTS ERROR:",
+            repr(e)
+        )
+
 
         return jsonify(
             error="TTS failed",
@@ -197,30 +286,52 @@ def chat():
             silent=True
         ) or {}
 
+
         text = str(
-            data.get("text", "")
+            data.get(
+                "text",
+                ""
+            )
         ).strip()
+
 
         language = str(
-            data.get("language", "en-IN")
+            data.get(
+                "language",
+                "en-IN"
+            )
         ).strip()
 
-        profile = data.get("profile") or {}
 
-        contacts = data.get("contacts") or []
+        profile = data.get(
+            "profile"
+        ) or {}
 
-        history = data.get("history") or []
 
-        location = data.get("location")
+        contacts = data.get(
+            "contacts"
+        ) or []
+
+
+        history = data.get(
+            "history"
+        ) or []
+
+
+        location = data.get(
+            "location"
+        )
 
 
         if not text:
+
             return jsonify(
                 error="No text provided"
             ), 400
 
 
         if language not in LANGUAGE_NAMES:
+
             language = "en-IN"
 
 
@@ -241,8 +352,9 @@ Supported languages:
 {", ".join(LANGUAGE_NAMES.values())}
 
 The user may ask to change language.
-If they do, set the language field to the requested
-supported language code.
+
+If they ask to change language, set the language field
+to the requested supported language code.
 
 Understand natural conversation and follow-up questions.
 
@@ -285,6 +397,9 @@ set or manage a medicine reminder.
 Use action type "call" ONLY when the user clearly
 asks to call a saved contact.
 
+Use action type "none" when no application action
+is required.
+
 
 IMPORTANT
 
@@ -299,14 +414,14 @@ language:
 One of the supported language codes.
 
 action:
-Either null, or an object containing:
+An object containing:
 
 type:
-"weather", "medicine", or "call"
+"none", "weather", "medicine", or "call"
 
 contact:
 The contact name when type is "call".
-For other action types, use an empty string.
+For "none", "weather", and "medicine", use an empty string.
 """
 
 
@@ -316,28 +431,40 @@ For other action types, use an empty string.
 
         conversation_parts = []
 
+
         conversation_parts.append(
             "SYSTEM INSTRUCTIONS:\n" + system
         )
 
 
-        # Keep the latest 20 messages
+        # Keep latest 20 messages
+
         for h in history[-20:]:
 
-            role = h.get("role")
-
-            content = str(
-                h.get("content", "")
+            role = h.get(
+                "role"
             )
 
+
+            content = str(
+                h.get(
+                    "content",
+                    ""
+                )
+            )
+
+
             if not content:
+
                 continue
+
 
             if role == "user":
 
                 conversation_parts.append(
                     f"USER:\n{content}"
                 )
+
 
             elif role == "assistant":
 
@@ -357,67 +484,6 @@ For other action types, use an empty string.
 
 
         # ====================================================
-        # JSON SCHEMA
-        # ====================================================
-
-        response_schema = {
-            "type": "object",
-            "properties": {
-
-                "reply": {
-                    "type": "string",
-                    "description": "ARIA's spoken response."
-                },
-
-                "language": {
-                    "type": "string",
-                    "enum": list(
-                        LANGUAGE_NAMES.keys()
-                    )
-                },
-
-"action": {
-    "type": "object",
-    "properties": {
-        "type": {
-            "type": "string",
-            "enum": ["weather", "medicine", "call"]
-        },
-        "contact": {
-            "type": "string"
-        }
-    },
-    "required": ["type", "contact"],
-    "additionalProperties": False
-},
-
-                        "contact": {
-                            "type": "string"
-                        }
-
-                    },
-
-                    "required": [
-                        "type",
-                        "contact"
-                    ],
-
-                    "additionalProperties": False
-                }
-
-            },
-
-            "required": [
-                "reply",
-                "language",
-                "action"
-            ],
-
-            "additionalProperties": False
-        }
-
-
-        # ====================================================
         # GEMINI REQUEST
         # ====================================================
 
@@ -433,7 +499,7 @@ For other action types, use an empty string.
 
                 response_mime_type="application/json",
 
-                response_schema=response_schema
+                response_schema=AriaResponse
             )
         )
 
@@ -444,15 +510,22 @@ For other action types, use an empty string.
 
         output_text = response.text
 
+
         if not output_text:
+
             raise RuntimeError(
                 "Gemini returned an empty response."
             )
 
 
-        result = json.loads(
+        # Validate Gemini JSON through Pydantic
+
+        parsed = AriaResponse.model_validate_json(
             output_text
         )
+
+
+        result = parsed.model_dump()
 
 
         # ====================================================
@@ -464,37 +537,57 @@ For other action types, use an empty string.
             result["language"] = language
 
 
-        if "reply" not in result:
+        if not result.get("reply"):
 
             result["reply"] = (
                 "Sorry, I couldn't generate a response."
             )
 
 
-        if "action" not in result:
+        action = result.get(
+            "action"
+        )
 
-            result["action"] = None
+
+        if not isinstance(
+            action,
+            dict
+        ):
+
+            result["action"] = {
+                "type": "none",
+                "contact": ""
+            }
 
 
-        # Make sure action has the expected structure
-        if result["action"] is not None:
+        else:
 
-            action = result["action"]
+            action_type = action.get(
+                "type"
+            )
 
-            if action.get("type") not in (
+
+            if action_type not in (
+                "none",
                 "weather",
                 "medicine",
                 "call"
             ):
 
-                result["action"] = None
+                result["action"] = {
+                    "type": "none",
+                    "contact": ""
+                }
+
 
             elif "contact" not in action:
 
                 action["contact"] = ""
 
 
-        return jsonify(result)
+        return jsonify(
+            result
+        )
 
 
     except Exception as e:
@@ -503,6 +596,7 @@ For other action types, use an empty string.
             "CHAT ERROR:",
             repr(e)
         )
+
 
         return jsonify(
             error="AI conversation failed",
@@ -519,11 +613,13 @@ def weather():
 
     import requests
 
+
     try:
 
         lat = float(
             request.args["lat"]
         )
+
 
         lon = float(
             request.args["lon"]
@@ -535,8 +631,11 @@ def weather():
             "https://api.open-meteo.com/v1/forecast",
 
             params={
+
                 "latitude": lat,
+
                 "longitude": lon,
+
                 "current":
                     "temperature_2m,"
                     "wind_speed_10m,"
@@ -558,31 +657,45 @@ def weather():
         codes = {
 
             0: "Clear sky",
+
             1: "Mainly clear",
+
             2: "Partly cloudy",
+
             3: "Overcast",
 
             45: "Fog",
+
             48: "Rime fog",
 
             51: "Light drizzle",
+
             53: "Drizzle",
+
             55: "Heavy drizzle",
 
             61: "Light rain",
+
             63: "Rain",
+
             65: "Heavy rain",
 
             71: "Light snow",
+
             73: "Snow",
+
             75: "Heavy snow",
 
             80: "Rain showers",
+
             81: "Rain showers",
+
             82: "Heavy rain showers",
 
             95: "Thunderstorm",
+
             96: "Thunderstorm with hail",
+
             99: "Thunderstorm with heavy hail"
         }
 
@@ -611,6 +724,7 @@ def weather():
             repr(e)
         )
 
+
         return jsonify(
             error="Weather failed",
             details=str(e)
@@ -624,13 +738,17 @@ def weather():
 if __name__ == "__main__":
 
     app.run(
+
         host="0.0.0.0",
+
         port=int(
             os.environ.get(
                 "PORT",
                 5000
             )
         ),
+
         debug=False,
+
         threaded=True
     )
