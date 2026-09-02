@@ -3,3 +3,4 @@ gTTS
 google-genai
 requests
 gunicorn
+pydantic
