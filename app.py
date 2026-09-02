@@ -6,9 +6,9 @@ from openai import OpenAI
 app = Flask(__name__)
 
 # Keep your API key ONLY on the server:
-# Linux/macOS: export OPENAI_API_KEY="..."
-# Windows PowerShell: $env:OPENAI_API_KEY="..."
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+# Linux/macOS: export GEMINI_API_KEY="..."
+# Windows PowerShell: $env:GEMINI_API_KEY="..."
+client = OpenAI(api_key=os.environ.get("GEMINI_API_KEY"))
 MODEL = os.environ.get("ARIA_MODEL", "gpt-5.6-luna")
 
 TTS_LANGUAGES = {
