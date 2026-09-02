@@ -376,22 +376,20 @@ For other action types, use an empty string.
                     )
                 },
 
-                "action": {
-                    "type": [
-                        "object",
-                        "null"
-                    ],
-
-                    "properties": {
-
-                        "type": {
-                            "type": "string",
-                            "enum": [
-                                "weather",
-                                "medicine",
-                                "call"
-                            ]
-                        },
+"action": {
+    "type": "object",
+    "properties": {
+        "type": {
+            "type": "string",
+            "enum": ["weather", "medicine", "call"]
+        },
+        "contact": {
+            "type": "string"
+        }
+    },
+    "required": ["type", "contact"],
+    "additionalProperties": False
+},
 
                         "contact": {
                             "type": "string"
